@@ -2,8 +2,11 @@
 
 // Name: Jake Tsuchiyama
 // Date: 2/2/22
-// Title: Lab5 - Setting up a UDP Client w/ Checksum, Sequence Number, and Acknowledgement Number
-// Description:
+// Title: Lab5 - Setting up a UDP Client w/ Reliable Transfer
+// Description: The program sets up a server which receives a file from a client using the UDP protocol with reliable transfer. 
+// This is achieved by implementing the Stop and Wait protocol with a checksum, sequence number, and acknowledgement number. 
+// While the server is running, it is constantly waiting to receive a file. When receiving the file, the server checks the header
+// for the proper sequence number and checksum. 
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,19 +23,19 @@
 
 //Declare a Header structure that holds, sequence/ acknowledgement number, checksum, and length of a packet
 typedef struct {
-    int seq_ack;
-    int len;
-    int cksum;
+	int seq_ack;
+    	int len;
+    	int cksum;
 } Header;
 
 //Declare a packet structure that holds data and header
 typedef struct {
-    Header header;
-    char data[10];
+    	Header header;
+    	char data[10];
 } Packet;
 
 //Declare client address to fill in address of sender
-struct sockaddr_in servAddr, clienAddr;
+struct sockaddr_in servAddr, clientAddr;
 
 //Calculating the Checksum
 /*The simplest checksum algorithm is the so-called longitudinal parity check, 
@@ -40,133 +43,140 @@ which breaks the data into "bytes" with a fixed number 8 bits, and then
 computes the exclusive or (XOR) of all those bytes. 
 The result is appended to the message as an extra byte*/
 int getChecksum(Packet packet) {
-    packet.header.cksum = 0;
-    int checksum = 0;
-    char *ptr = (char *)&packet;
-    char *end = ptr + sizeof(Header) + packet.header.len;
-    while (ptr < end) {
-        checksum ^= *ptr++;
-    }
-    return checksum;
+    	packet.header.cksum = 0;
+    	int checksum = 0;
+    	char *ptr = (char *)&packet;
+    	char *end = ptr + sizeof(Header) + packet.header.len;
+    	while (ptr < end) {
+        	checksum ^= *ptr++;
+    	}
+    	return checksum;
 }
 
 //Printing received packet, sequence/acknowledgement number, and checksum
 void printPacket(Packet packet) {
-    printf("Packet{ header: { seq_ack: %d, len: %d, cksum: %d }, data: \"",
-            packet.header.seq_ack,
-            packet.header.len,
-            packet.header.cksum);
-    fwrite(packet.data, (size_t)packet.header.len, 1, stdout);
-    printf("\" }\n");
+    	printf("Packet{ header: { seq_ack: %d, len: %d, cksum: %d }, data: \"", packet.header.seq_ack, packet.header.len,packet.header.cksum);
+    	fwrite(packet.data, (size_t)packet.header.len, 1, stdout);
+    	printf("\" }\n");
 }
 
 //Server sending ACK to the client
 void serverSend(int sockfd, const struct sockaddr *address, socklen_t addrlen, int seqnum) {
-    Packet packet;	
-    packet.header.seq_ack = seqnum;
-    packet.header.len = sizeof(packet.data);
+    	Packet packet;	
+    	packet.header.seq_ack = seqnum;
+    	packet.header.len = sizeof(packet.data);
 	packet.header.cksum = getChecksum(packet);
 
-    //send Ack packet
-    strcpy(packet.data,"Acknowledged");
-
-    // send packet
-    sendto(sockfd, &packet, sizeof(packet), 0, address, addrlen);
+    	// send packet
+    	sendto(sockfd, &packet, sizeof(packet), 0, address, addrlen);
     
-    printf("\t Server sending ACK %d, checksum %d\n", packet.header.seq_ack, packet.header.cksum);
+    	printf("\t Server sending ACK %d, checksum %d\n", packet.header.seq_ack, packet.header.cksum);
 }
 
 //Server receiving Packet from the client
 Packet serverReceive(int sockfd, struct sockaddr *address, socklen_t *addrlen, int seqnum) {
-    Packet packet;
-    while (1) {
-        //recv packets from the client
-	    recvfrom(sockfd, &packet, sizeof(packet), 0, address, addrlen);
+    	Packet packet;
+    	while (1) {
+        	//recv packets from the client
+		recvfrom(sockfd, &packet, sizeof(packet), 0, address, addrlen);
         
-        //print received packet
-        printPacket(packet);
+        	//print received packet
+        	printPacket(packet);
 	    
-        //cacluate the checksum
+        	//cacluate the checksum
+       		int e_cksum = getChecksum(packet); 
         
-        
-        //check the checksum
-        if (packet.header.cksum!=e_cksum) {
-            printf("\t Server: Bad checksum, expected checksum was: %d\n", e_cksum);
-            //resend packet
-            serverSend(sockfd, address, *addrlen, !seqnum);
-        
-        //check the sequence number
-        } else if (packet.header.seq_ack != seqnum) {
-            printf("\t Server: Bad seqnum, expected sequence number was:%d\n",seqnum);
-            //resend packet
-            
+        	//check the checksum
+        	if (packet.header.cksum != e_cksum) 
+		{
+            		printf("\t Server: Bad checksum, expected checksum was: %d\n", e_cksum);
 
-        //if the ckechsum and sequence numbers are correct send ack with the right sequence number
-        } else {
-            printf("\t Server: Good packet\n");
-            //send ack
-	        
-            break;
-        }
-    }
-    return packet;
+            		//resend packet
+            		serverSend(sockfd, address, *addrlen, !seqnum);
+		}       
+ 
+        	//check the sequence number
+		else if (packet.header.seq_ack != seqnum) 
+		{
+            		printf("\t Server: Bad seqnum, expected sequence number was:%d\n",seqnum);
+
+            		//resend packet
+            		serverSend(sockfd, address, *addrlen, !seqnum);
+		}
+
+        	//if the ckechsum and sequence numbers are correct send ack with the right sequence number
+        	else 
+		{
+            		printf("\t Server: Good packet\n");
+			
+            		//send ack
+			serverSend(sockfd, address, *addrlen, seqnum);	        
+
+            		break;
+        	}
+    	}
+    	return packet;
 }
 
 int main(int argc, char *argv[]) {
-    //Get from the command line, server IP and dst file
-    if (argc != 3) {
-        printf("Usage: %s <port> <dstfile>\n", argv[0]);
-        exit(0);
-    }
+    	//Get from the command line, server IP and dst file
+    	if (argc != 3) 
+	{
+        	printf("Usage: %s <port> <dstfile>\n", argv[0]);
+        	exit(0);
+    	}
 
-    //Declare socket file descriptor
-    int sockfd;
+    	//Declare socket file descriptor
+    	int sockfd;
 
-    //Open a UDP socket, if successful, returns a descriptor
-    if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
-    {
-        perror("Failure to setup an endpoint socket\n");
-        exit(1);
-    }
+    	//Open a UDP socket, if successful, returns a descriptor
+    	if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+    	{
+        	perror("Failure to setup an endpoint socket\n");
+        	exit(1);
+    	}
 
-    //Setup the server address to bind using socket addressing structure
-    servAddr.sin_family = AF_INET;
-    servAddr.sin_port = htons(atoi(argv[1]));
-    servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    	//Setup the server address to bind using socket addressing structure
+    	servAddr.sin_family = AF_INET;
+    	servAddr.sin_port = htons(atoi(argv[1]));
+    	servAddr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    //bind IP address and port for server endpoint socket
-    if((bind(sockfd, (struct sockaddr *)&servAddr, sizeof(struct sockaddr))) < 0)
+    	//bind IP address and port for server endpoint socket
+    	if((bind(sockfd, (struct sockaddr *)&servAddr, sizeof(struct sockaddr))) < 0)
 	{
 		perror("Failure to bind server socket to endpoint socket\n");
 		exit(1);
 	}
 
-    //open file using argv[2]
-    int fp = open(argv[2], O_CREAT | O_RDWR, 0666);
-    if(fp < 0)
-    {
+    	//open file using argv[2]
+    	int fp = open(argv[2], O_CREAT | O_RDWR, 0666);
+    	if(fp < 0)
+    	{
 		perror("File failed to open\n");
 	    	exit(1);
-    }
+    	}
 
-    //initialize sequence number to 0
-    int seqnum = 0;
+    	//initialize sequence number to 0
+    	int seqnum = 0;
     
-    //get file contents (as packets) from client
-    Packet packet;
-    socklen_t addr_len = sizeof(clienAddr);
-    printf("Waiting for packets to come.....\n");
-    do 
-    {
-        //receive a packet and check through serverReceive()
-        write(fp, packet.data, strlen(packet.data));
-        //alternate the sequence number between 0 and 1
-        seqnum = (seqnum+1) % 2;
-    } while (packet.header.len != 0);
+    	//get file contents (as packets) from client
+    	Packet packet;
+    	socklen_t addr_len = sizeof(clientAddr);
+    	printf("Waiting for packets to come.....\n");
+    	do 
+    	{
+        	//receive a packet and check through serverReceive()
+		packet = serverReceive(sockfd, (struct sockaddr *)&clientAddr, &addr_len, seqnum);        	
 
-    //close file and socket descriptors
-    close(fp);
-    close(sockfd);
+        	write(fp, packet.data, packet.header.len);
+
+        	//alternate the sequence number between 0 and 1
+        	seqnum = (seqnum+1) % 2;
+    	} while (packet.header.len != 0);
+
+    	//close file and socket descriptors
+    	close(fp);
+    	close(sockfd);
     
-    return 0;
+    	return 0;
 }

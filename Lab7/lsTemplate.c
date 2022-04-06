@@ -2,8 +2,10 @@
  
 // Name: Jake Tsuchiyama
 // Date: 2/23/22
-// Title: Lab7 - 
-// Description: 
+// Title: Lab7 - Implementing Link State Routing 
+// Description: The goal of this lab is to develop and implement link state routing using
+// Dijkstra's algorithm. Each machine used in routing is defined in the machines file, and 
+// the cost of the links is defined in the costs file. 
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -47,13 +49,52 @@ struct sockaddr_in otheraddr;
 socklen_t addr_size;
 pthread_mutex_t	lock;
 
+// print costs
+void print_costs(void)
+{
+	int i, j;
+	
+	for(i = 0; i < N; i++)
+	{
+		for(j = 0; j < N; j++)
+		{
+			pthread_mutex_lock(&lock);
+			printf("%d\t", costs[i][j]);
+			pthread_mutex_unlock(&lock);
+		}
+		printf("\n");
+	}
+}
+
 
 // receive info
-void * receive_info (void *arg)
+void *receive_info (void *arg)
 {
-	//Code to receive info and update costs
+	int updated[3];
+	int nbytes;
+	int n0, n1, n2;
 
+	while(1)
+	{
+		// if the data was not properly received
+		if(recvfrom(sock, updated, sizeof(int) * 3, 0, NULL, NULL) != 12)
+		{
+			printf("error receiving\n");
+		}
+		
+		n0 = ntohl(updated[0]);
+		n1 = ntohl(updated[1]);
+		n2 = ntohl(updated[2]);
 
+		// update costs
+		pthread_mutex_lock(&lock);
+		costs[n0][n1] = n2;
+		costs[n1][n0] = n2;
+		pthread_mutex_unlock(&lock);
+
+		printf("received\n");
+		print_costs();
+	}
 }
 
 
@@ -81,16 +122,30 @@ void * run_link_state (void *arg)
 	
 		for (i = 1; i < N; i++)
 		{
-			// find closest node
-			
-	
+			// find closest node/minimum by iteratively determining the minimum
+			min = INFINITE;
+			spot = -1;
+			for(j=0; j < N; j++)
+			{
+				if(taken[j] == 0)
+				{
+					if(distances[j] < min)
+					{
+						min = distances[j];
+						spot = j;
+					}
+				}
+			}
 		
-			
-			// recalculate distances
+			// put the closest node/minimum into the set 
+			taken[spot] = 1;			
+
+			// recalculate all the distances according to the added node
 			for (j = 0; j < N; j++)
 			{
 				if (taken[j] == 0)
 				{
+					// find the minimum between the old and new distances
 					pthread_mutex_lock (&lock);
 					distances[j] = MIN (distances[j], (distances[spot] + costs[spot][j]));
 					pthread_mutex_unlock (&lock);
@@ -105,16 +160,6 @@ void * run_link_state (void *arg)
 	}
 }
 
-
-// print costs 
-void print_costs (void)
-{
-	// print costs
-
-}
-
-
-
 //main()
 int main (int argc, char *argv[])
 {
@@ -124,11 +169,11 @@ int main (int argc, char *argv[])
 	int		id, cost;
 	int		packet[3];
 
-    //Get from the command line, id, machines, cost table
-    if (argc != 5) {
-        printf("Usage: %s <id> <nodes> <machines> <cost table>\n", argv[0]);
-        exit(0);
-    }
+	//Get from the command line, id, machines, cost table
+    	if (argc != 5) {
+        	printf("Usage: %s <id> <nodes> <machines> <cost table>\n", argv[0]);
+        	exit(0);
+    	}
 
 	myid = atoi (argv[1]);
 	nodes = atoi (argv[2]);
@@ -171,30 +216,29 @@ int main (int argc, char *argv[])
 			fscanf (fp, "%d", &costs[i][j]);
 		}
 	}
-
 	fclose (fp);
 		
 
-    // init address
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons ((short)machines[myid].port);
-    addr.sin_addr.s_addr = htonl (INADDR_ANY);
-    memset ((char *)addr.sin_zero, '\0', sizeof (addr.sin_zero));
-    addr_size = sizeof (addr);
+    	// init address
+    	addr.sin_family = AF_INET;
+    	addr.sin_port = htons ((short)machines[myid].port);
+    	addr.sin_addr.s_addr = htonl (INADDR_ANY);
+    	memset ((char *)addr.sin_zero, '\0', sizeof (addr.sin_zero));
+    	addr_size = sizeof (addr);
 
-    // create socket
-    if ((sock = socket (AF_INET, SOCK_DGRAM, 0)) < 0)
-    {
-        printf ("socket error\n");
-        return 1;
-    }
+    	// create socket
+    	if ((sock = socket (AF_INET, SOCK_DGRAM, 0)) < 0)
+    	{
+        	printf ("socket error\n");
+        	return 1;
+    	}
 
-    // bind
-    if (bind (sock, (struct sockaddr *)&addr, sizeof (addr)) != 0)
-    {
-        printf ("bind error\n");
-        return 1;
-    }
+    	// bind
+    	if (bind (sock, (struct sockaddr *)&addr, sizeof (addr)) != 0)
+    	{
+        	printf ("bind error\n");
+        	return 1;
+    	}
 
 
 	// create threads
@@ -205,8 +249,9 @@ int main (int argc, char *argv[])
 	// read changes from the keyboard
 	for (i = 0; i < 3; i++)
 	{
-		printf ("any changes? ");
+		printf ("any changes?\n");
 		scanf ("%d%d", &id, &cost);
+
 		if (id >= N  ||  id == myid)
 		{
 			printf ("wrong id\n");
@@ -238,6 +283,6 @@ int main (int argc, char *argv[])
 	}
 
 	sleep (20);
- return 0;
+ 	return 0;
 }
 

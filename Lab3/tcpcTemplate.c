@@ -61,8 +61,11 @@ int main(int argc, char *argv[]){
 
     	//Client begins to write and read from the server
    	FILE *dst = fopen(argv[4], "a");
-	while(read(sockfd, buf, sizeof(buf)) != 0)
-		fwrite(&buf, sizeof(buf), 1, dst); 
+	while(read(sockfd, buf, 1) != 0)
+		fwrite(&buf, 1, 1, dst); 
+	
+	//close file
+	fclose(dst);
 
     	//Close socket descriptor
 	close(sockfd);    

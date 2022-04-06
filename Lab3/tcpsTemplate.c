@@ -15,7 +15,7 @@
 #include <arpa/inet.h>
 
 //Declare socket file descriptor.
-int sockfd;
+int sockfd, connfd, sin_size;
 
 //Declare receiving and sending buffers of size 10 bytes
 char buf[10];
@@ -29,7 +29,7 @@ void* connectionHandler(void* sock){
 	char srcName[20];
 
    	//get the connection descriptor
-	int connfd = *(int *) sock; 
+	int sockNum = *(int *) sock; 
  
   	//Connection established, server begins to read and write to the connecting client
    	printf("Connection Established with client IP: %s and Port: %d\n", inet_ntoa(clientAddr.sin_addr), ntohs(clientAddr.sin_port));
@@ -44,11 +44,11 @@ void* connectionHandler(void* sock){
    	//open file and send to client
 	FILE* src = fopen(srcName, "r");  
 	if(src != NULL)
-		printf("Opened file successfully");
+		printf("Opened file successfully\n");
  
    	//read file and send to connection descriptor
-	while(fread(&buf, sizeof(char), 10, src))
-		write(connfd, buf, sizeof(buf));
+	while(fread(&buf, 1, 1, src))
+		write(sockNum, buf, 1);
 
    	printf("File transfer complete\n");
    
@@ -72,7 +72,7 @@ int main(int argc, char *argv[]) {
    	//Open a TCP socket, if successful, returns a descriptor
 	if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)
 	{
-		perror("Failure to stup an endpoint socket");
+		perror("Failure to setup an endpoint socket");
 		exit(1);
 	}
 
@@ -92,11 +92,11 @@ int main(int argc, char *argv[]) {
    	// Server listening to the socket endpoint, and can queue 5 client requests
    	printf("Server listening/waiting for client at port %d\n", atoi(argv[1]));
 	listen(sockfd, 5);
-	int sin_size = sizeof(struct sockaddr_in);
+	sin_size = sizeof(struct sockaddr_in);
 	
    	//Server accepts the connection and call the connection handler
-	int connfd = accept(sockfd, (struct sockaddr *)&clientAddr, (socklen_t *)&sin_size);
-	connectionHandler((void *) &connfd);				
+	connfd = accept(sockfd, (struct sockaddr *)&clientAddr, (socklen_t *)&sin_size);
+	connectionHandler((void*) &connfd);				
  
    	//close socket descriptor
    	close(sockfd);

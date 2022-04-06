@@ -3,7 +3,8 @@
 // Name: Jake Tsuchiyama
 // Date: 1/26/22
 // Title: Lab4 - Setting up a UDP Client
-// Description: 
+// Description: The program sets up a client that sends a source file to the server
+// using the UDP protocol. The server is targeted by declaring the server IP and port. 
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,80 +20,96 @@
 
 //Declare a Header structure that holds length of a packet
 typedef struct {
-    int len;
+    	int len;
 } Header;
 
 //Declare a packet structure that holds data and header
 typedef struct {
-    Header header;
-    char data[10];
+    	Header header;
+    	char data[10];
 } Packet;
 
 //Printing received packet
 void printPacket(Packet packet) {
-    printf("Packet{ header: { len: %d }, data: \"",
-            packet.header.len);
-    fwrite(packet.data, (size_t)packet.header.len, 1, stdout);
-    printf("\" }\n");
+    	printf("Packet{ header: { len: %d }, data: \"", packet.header.len);
+    	fwrite(packet.data, (size_t)packet.header.len, 1, stdout);
+    	printf("\" }\n");
 }
 
 void clientSend(int sockfd, const struct sockaddr *address, socklen_t addrlen, Packet packet) {
-    while (1) {	
-        //send the packet
-        printf("Client sending packet\n");
+    	while (1) {	
+        	//send the packet
+        	printf("Client sending packet\n");
+		sendto(sockfd, &packet, sizeof(packet), 0, address, addrlen);
         
-        //receive an ACK from the server
-        Packet recvpacket;
+        	//receive an ACK from the server
+        	Packet recvpacket;
+		recvfrom(sockfd, &recvpacket, sizeof(recvpacket), 0, (struct sockaddr *)address, &addrlen);
         
-        //print received packet
-        printPacket(recvpacket);
-        break;
+        	//print received packet
+        	printPacket(recvpacket);
+        	break;
     }
 }
 
 int main(int argc, char *argv[]) {
-    //Get from the command line, server IP, Port and src file
-    if (argc != 4) {
-        printf("Usage: %s <ip> <port> <srcfile>\n", argv[0]);
-        exit(0);
-    }
+    	//Get from the command line, server IP, Port and src file
+    	if (argc != 4) {
+        	printf("Usage: %s <ip> <port> <srcfile>\n", argv[0]);
+        	exit(0);
+    	}
     
-    //Declare socket file descriptor.
-    int sockfd; 
+    	//Declare socket file descriptor.
+    	int sockfd; 
 
-    //Open a UDP socket, if successful, returns a descriptor    
-    
-    //Declare server address and get host to connect to
-    
-    //clear memory segment holding servAddr
-    memset(&servAddr, 0, sizeof(servAddr));
+    	//Open a UDP socket, if successful, returns a descriptor    
+	if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0)
+	{
+		perror("Failed to setup endpoint socket.\n");
+		exit(1);
+	} 	
+   
+    	//Declare server address and get host to connect to
+    	struct sockaddr_in servAddr;
+	struct hostent *host;
+	host = (struct hostent *) gethostbyname(argv[1]);
 
-    //Set the server address to send using socket addressing structure 
-    servAddr.sin_port = htons(atoi(argv[2]));
-    servAddr.sin_family = AF_INET;
-    servAddr.sin_addr= *((struct in_addr *)host->h_addr);
+    	//clear memory segment holding servAddr
+    	memset(&servAddr, 0, sizeof(servAddr));
 
-    //Open file given by argv[3]
-    int fp=open(argv[3], O_RDWR);
-    if(fp < 0){
-    	perror("Failed to open file\n");
-	    exit(1);
-    }
+    	//Set the server address to send using socket addressing structure 
+    	servAddr.sin_port = htons(atoi(argv[2]));
+    	servAddr.sin_family = AF_INET;
+    	servAddr.sin_addr= *((struct in_addr *)host->h_addr);
 
-    // send file contents to server
-    socklen_t addr_len = sizeof(servAddr);
-    Packet packet;
-    while(read(......) > 0){
-    	packet.header.len=strlen(packet.data);
-    	clientSend(sockfd, (struct sockaddr *)&servAddr, addr_len, packet);
-    }
-    //sending zero-length packet (final) to server to end connection
-    Packet final;
-    final.header.len=0;
-    clientSend(sockfd,(struct sockaddr *)&servAddr, addr_len, final);
+    	//Open file given by argv[3]
+    	int fp = open(argv[3], O_RDWR);
+    	if(fp < 0){
+    		perror("Failed to open file\n");
+	    	exit(1);
+    	}
+
+    	// send file contents to server
+    	socklen_t addr_len = sizeof(servAddr);
+    	Packet packet;
+
+	// Captures the number of chars that are written
+	int numWritten; 
+
+    	while((numWritten = read(fp, packet.data, sizeof(packet.data))) > 0)
+	{	
+		packet.header.len = numWritten;
+    		clientSend(sockfd, (struct sockaddr *)&servAddr, addr_len, packet);
+    	}
+
+    	//sending zero-length packet (final) to server to end connection
+    	Packet final;
+    	final.header.len = 0;
+    	clientSend(sockfd, (struct sockaddr *)&servAddr, addr_len, final);
 
 	//close file and socket
-    close(fp);
-    close(sockfd);
-    return 0;
+    	close(fp);
+    	close(sockfd);
+
+    	return 0;
 }
